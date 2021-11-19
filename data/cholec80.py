@@ -15,14 +15,23 @@ class Cholec80(object):
             self.video_ids = list(range(41, 81))
             self.ordered = True
         self.dirs = []
+        self.len = 0
+
         for i in self.video_ids:
             curr_seq_len = 0
+            frame_id = 0
             curr_dir = []
             data_dir = f'{self.root_dir}/frame/{i}'
-            for d in sorted(os.listdir(data_dir)):
-                curr_dir.append('%s/%s' % (data_dir, d))
+
+            frame_dir = f'{data_dir}/{frame_id}.jpg'
+            while os.path.exists(frame_dir):
+                curr_dir.append(frame_dir)
                 curr_seq_len += 1
+                frame_id += 25
+                frame_dir = f'{data_dir}/{frame_id}.jpg'
             self.dirs.append(curr_dir)
+            self.len += curr_seq_len
+
         self.seq_len = seq_len
         self.image_size = image_size
         self.seed_is_set = False  # multi threaded loading
@@ -35,7 +44,7 @@ class Cholec80(object):
             np.random.seed(seed)
 
     def __len__(self):
-        return len(self.dirs)
+        return self.len
 
     def get_seq(self):
         if self.ordered:
@@ -49,7 +58,7 @@ class Cholec80(object):
             self.frame_id = np.random.randint(len(self.dirs[self.video_id]) - self.seq_len)
         image_seq = []
         for i in range(self.seq_len):
-            fname = self.dirs[self.video_id][self.frame_id]
+            fname = self.dirs[self.video_id][self.frame_id + i]
             im = imread(fname).reshape(1, 64, 64, 3)
             image_seq.append(im / 255.)
         image_seq = np.concatenate(image_seq, axis=0)
