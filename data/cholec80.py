@@ -47,15 +47,16 @@ class Cholec80(object):
         return self.len
 
     def get_seq(self):
+        max_start = len(self.dirs[self.video_id]) - self.seq_len
         if self.ordered:
-            if self.frame_id == len(self.dirs[self.video_id]) - 1:
+            if self.frame_id == max_start:
                 self.frame_id = 0
                 self.video_id = (self.video_id + 1) % len(self.dirs)
             else:
                 self.frame_id += 1
         else:
-            self.video_id = np.random.randint(len(self.dirs))
-            self.frame_id = np.random.randint(len(self.dirs[self.video_id]) - self.seq_len)
+            self.video_id = np.random.choice(self.video_ids)
+            self.frame_id = np.random.randint(0, max_start)
         image_seq = []
         for i in range(self.seq_len):
             fname = self.dirs[self.video_id][self.frame_id + i]
