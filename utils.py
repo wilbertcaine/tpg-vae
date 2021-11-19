@@ -65,6 +65,18 @@ def load_dataset(opt):
                 data_root=opt.data_root,
                 seq_len=opt.n_eval, 
                 image_size=opt.image_width)
+    elif opt.dataset == 'cholec80':
+        from data.cholec80 import Cholec80
+        train_data = Cholec80(
+                data_root=opt.data_root,
+                train=True,
+                seq_len=opt.n_past+opt.n_future,
+                image_size=opt.image_width)
+        test_data = Cholec80(
+                data_root=opt.data_root,
+                train=False,
+                seq_len=opt.n_eval,
+                image_size=opt.image_width)
     
     return train_data, test_data
 
@@ -72,7 +84,7 @@ def sequence_input(seq, dtype):
     return [Variable(x.type(dtype)) for x in seq]
 
 def normalize_data(opt, dtype, sequence):
-    if opt.dataset == 'smmnist' or opt.dataset == 'kth' or opt.dataset == 'bair' :
+    if opt.dataset == 'smmnist' or opt.dataset == 'kth' or opt.dataset == 'bair' or opt.dataset == 'cholec80' :
         sequence.transpose_(0, 1)
         sequence.transpose_(3, 4).transpose_(2, 3)
     else:

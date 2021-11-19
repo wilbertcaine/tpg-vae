@@ -1,11 +1,11 @@
 import os
 import io
-from scipy.misc import imresize 
+# from scipy.misc import imresize
 import numpy as np
 from PIL import Image
-from scipy.misc import imresize
-from scipy.misc import imread 
-
+# from scipy.misc import imresize
+# from scipy.misc import imread
+from imageio import imread
 
 class RobotPush(object):
     

@@ -10,6 +10,7 @@ from tensorflow.python.platform import gfile
 
 from scipy.misc import imresize
 from scipy.misc import imsave
+# from cv2 import imwrite
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -26,6 +27,7 @@ def get_seq(dname):
     for f in filenames:
         k=0
         for serialized_example in tf.python_io.tf_record_iterator(f):
+        # for serialized_example in tf.io.tf_record_iterator(f):
             example = tf.train.Example()
             example.ParseFromString(serialized_example)
             image_seq = []
@@ -52,7 +54,8 @@ def convert_data(dname):
         f = f.split('/')[-1]
         os.makedirs('%s/processed_data/%s/%s/%d/' % (opt.data_dir, dname,  f[:-10], k), exist_ok=True)
         for i in range(len(seq)):
-            imsave('/%s/processed_data/%s/%s/%d/%d.png' % (opt.data_dir, dname,  f[:-10], k, i), seq[i])
+            imsave('%s/processed_data/%s/%s/%d/%d.png' % (opt.data_dir, dname,  f[:-10], k, i), seq[i])
+            # imwrite('/%s/processed_data/%s/%s/%d/%d.png' % (opt.data_dir, dname,  f[:-10], k, i), seq[i])
 
         print('%s data: %s (%d)  (%d)' % (dname, f, k, n))
 
