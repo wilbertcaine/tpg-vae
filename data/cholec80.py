@@ -10,7 +10,7 @@ class Cholec80(object):
         self.root_dir = data_root
         if train:
             self.video_ids = list(range(1, 41))
-            self.ordered = False
+            self.ordered = True # False
         else:
             self.video_ids = list(range(41, 81))
             self.ordered = True
@@ -35,7 +35,7 @@ class Cholec80(object):
         self.seq_len = seq_len
         self.image_size = image_size
         self.seed_is_set = False  # multi threaded loading
-        self.video_id = self.video_ids[0]
+        self.video_id = 0
         self.frame_id = 0
 
     def set_seed(self, seed):
@@ -47,16 +47,17 @@ class Cholec80(object):
         return self.len
 
     def get_seq(self):
-        max_start = len(self.dirs[self.video_id]) - self.seq_len
         if self.ordered:
-            if self.frame_id == max_start:
+            max_start_frame_id = len(self.dirs[self.video_id]) - self.seq_len
+            if self.frame_id == max_start_frame_id:
                 self.frame_id = 0
                 self.video_id = (self.video_id + 1) % len(self.dirs)
             else:
                 self.frame_id += 1
         else:
-            self.video_id = np.random.choice(self.video_ids)
-            self.frame_id = np.random.randint(0, max_start)
+            self.video_id = np.random.randint(0, len(self.video_ids) - 1)
+            max_start_frame_id = len(self.dirs[self.video_id]) - self.seq_len
+            self.frame_id = np.random.randint(0, max_start_frame_id)
         image_seq = []
         for i in range(self.seq_len):
             fname = self.dirs[self.video_id][self.frame_id + i]

@@ -15,6 +15,8 @@ from skimage.measure import compare_ssim as ssim_metric
 from scipy import signal
 from scipy import ndimage
 from PIL import Image, ImageDraw
+from skimage import img_as_ubyte
+import skimage.io as io
 
 
 from torchvision import datasets, transforms
@@ -153,14 +155,17 @@ def save_np_img(fname, x):
     img = scipy.misc.toimage(x,
                              high=255*x.max(),
                              channel_axis=0)
-    img.save(fname)
+    # img.save(filename)
+    img = img_as_ubyte(img)
+    io.imsave(filename, img)
 
 def make_image(tensor):
-    tensor = tensor.cpu().clamp(0, 1)
+    tensor = tensor.clamp(0, 1)
     if tensor.size(0) == 1:
         tensor = tensor.expand(3, tensor.size(1), tensor.size(2))
     # pdb.set_trace()
-    return scipy.misc.toimage(tensor.numpy(),
+    tensor = tensor.detach().cpu().numpy()
+    return scipy.misc.toimage(tensor,
                               high=255*tensor.max(),
                               channel_axis=0)
 
@@ -178,7 +183,9 @@ def save_gif(filename, inputs, duration=0.25):
         img = image_tensor(tensor, padding=0)
         img = img.cpu()
         img = img.transpose(0,1).transpose(1,2).clamp(0,1)
-        images.append(img.numpy())
+        img = img_as_ubyte(img)
+        # images.append(img.numpy())
+        images.append(img)
     imageio.mimsave(filename, images, duration=duration)
 
 def save_gif_with_text(filename, inputs, text, duration=0.25):
@@ -187,12 +194,15 @@ def save_gif_with_text(filename, inputs, text, duration=0.25):
         img = image_tensor([draw_text_tensor(ti, texti) for ti, texti in zip(tensor, text)], padding=0)
         img = img.cpu()
         img = img.transpose(0,1).transpose(1,2).clamp(0,1).numpy()
+        img = img_as_ubyte(img)
         images.append(img)
     imageio.mimsave(filename, images, duration=duration)
 
 def save_image(filename, tensor):
     img = make_image(tensor)
-    img.save(filename)
+    # img.save(filename)
+    img = img_as_ubyte(img)
+    io.imsave(filename, img)
 
 def save_tensors_image(filename, inputs, padding=1):
     images = image_tensor(inputs, padding)

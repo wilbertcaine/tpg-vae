@@ -10,6 +10,7 @@ import utils
 import itertools
 import progressbar
 import numpy as np
+from torch.nn import DataParallel
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -44,9 +45,18 @@ parser.add_argument('--data_threads', type=int, default=5, help='number of data 
 parser.add_argument('--num_digits', type=int, default=2, help='number of digits for moving mnist')
 parser.add_argument('--last_frame_skip', action='store_true', help='if true, skip connections go between frame t and frame t+t rather than last ground truth frame')
 
-
-
 opt = parser.parse_args()
+
+cuda_is_available = torch.cuda.is_available()
+if cuda_is_available:
+    torch.cuda.manual_seed_all(opt.seed)
+    dtype = torch.cuda.FloatTensor
+else:
+    dtype = torch.FloatTensor
+
+device_ids = [1] # 0, 1, 2, 3
+device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
+
 if opt.model_dir != '':
     # load model and continue training from checkpoint
     saved_model = torch.load('%s/model.pth' % opt.model_dir)
@@ -69,13 +79,6 @@ os.makedirs('%s/plots/' % opt.log_dir, exist_ok=True)
 print("Random Seed: ", opt.seed)
 random.seed(opt.seed)
 torch.manual_seed(opt.seed)
-cuda_is_available = torch.cuda.is_available()
-
-if cuda_is_available:
-    torch.cuda.manual_seed_all(opt.seed)
-    dtype = torch.cuda.FloatTensor
-else:
-    dtype = torch.FloatTensor
 
 
 # ---------------- load the models  ----------------
@@ -99,9 +102,9 @@ if opt.model_dir != '':
     posterior = saved_model['posterior']
     prior = saved_model['prior']
 else:
-    frame_predictor = lstm_models.lstm(opt.g_dim+opt.z_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size)
-    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size)
-    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size)
+    frame_predictor = lstm_models.lstm(opt.g_dim+opt.z_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size,device)
+    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size,device)
+    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size,device)
     frame_predictor.apply(utils.init_weights)
     posterior.apply(utils.init_weights)
     prior.apply(utils.init_weights)
@@ -146,13 +149,25 @@ def kl_criterion(mu1, logvar1, mu2, logvar2):
     return kld.sum() / opt.batch_size
 
 # --------- transfer to gpu ------------------------------------
-if cuda_is_available:
-    frame_predictor.cuda()
-    posterior.cuda()
-    prior.cuda()
-    encoder.cuda()
-    decoder.cuda()
-    mse_criterion.cuda()
+# if cuda_is_available:
+frame_predictor = DataParallel(frame_predictor, device_ids = device_ids)
+frame_predictor.to(device)
+# frame_predictor.cuda()
+posterior = DataParallel(posterior, device_ids = device_ids)
+posterior.to(device)
+# posterior.cuda()
+prior = DataParallel(prior, device_ids = device_ids)
+prior.to(device)
+# prior.cuda()
+encoder = DataParallel(encoder, device_ids = device_ids)
+encoder.to(device)
+# encoder.cuda()
+decoder = DataParallel(decoder, device_ids = device_ids)
+decoder.to(device)
+# decoder.cuda()
+mse_criterion = DataParallel(mse_criterion, device_ids = device_ids)
+mse_criterion.to(device)
+    # mse_criterion.cuda()
 
 # --------- load a dataset ------------------------------------
 train_data, test_data = utils.load_dataset(opt)
@@ -191,9 +206,9 @@ def plot(x, epoch):
     gt_seq = [x[i] for i in range(len(x))]
 
     for s in range(nsample):
-        frame_predictor.hidden = frame_predictor.init_hidden()
-        posterior.hidden = posterior.init_hidden()
-        prior.hidden = prior.init_hidden()
+        frame_predictor.module.hidden = frame_predictor.module.init_hidden()
+        posterior.module.hidden = posterior.module.init_hidden()
+        prior.module.hidden = prior.module.init_hidden()
         gen_seq[s].append(x[0])
         x_in = x[0]
         for i in range(1, opt.n_eval):
@@ -264,8 +279,8 @@ def plot(x, epoch):
 
 
 def plot_rec(x, epoch):
-    frame_predictor.hidden = frame_predictor.init_hidden()
-    posterior.hidden = posterior.init_hidden()
+    frame_predictor.module.hidden = frame_predictor.module.init_hidden()
+    posterior.module.hidden = posterior.module.init_hidden()
     gen_seq = []
     gen_seq.append(x[0])
     x_in = x[0]
@@ -308,9 +323,9 @@ def train(x):
     decoder.zero_grad()
 
     # initialize the hidden state.
-    frame_predictor.hidden = frame_predictor.init_hidden()
-    posterior.hidden = posterior.init_hidden()
-    prior.hidden = prior.init_hidden()
+    frame_predictor.module.hidden = frame_predictor.module.init_hidden()
+    posterior.module.hidden = posterior.module.init_hidden()
+    prior.module.hidden = prior.module.init_hidden()
 
     mse = 0
     kld = 0
@@ -349,19 +364,19 @@ for epoch in range(opt.niter):
     decoder.train()
     epoch_mse = 0
     epoch_kld = 0
-    progress = progressbar.ProgressBar(max_value=opt.epoch_size).start()
+    # progress = progressbar.ProgressBar(max_value=opt.epoch_size).start()
     for i in range(opt.epoch_size):
-        progress.update(i+1)
+        # progress.update(i+1)
         x = next(training_batch_generator)
 
-        # train frame_predictor 
+        # train frame_predictor
         mse, kld = train(x)
         epoch_mse += mse
         epoch_kld += kld
 
 
-    progress.finish()
-    utils.clear_progressbar()
+    # progress.finish()
+    # utils.clear_progressbar()
 
     print('[%02d] mse loss: %.5f | kld loss: %.5f (%d)' % (epoch, epoch_mse/opt.epoch_size, epoch_kld/opt.epoch_size, epoch*opt.epoch_size*opt.batch_size))
 
