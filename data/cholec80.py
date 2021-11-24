@@ -30,6 +30,7 @@ class Cholec80(object):
             self.tool_annotations.append(curr_tool)
 
             curr_phase = np.loadtxt(f'{self.root_dir}/phase_annotations/video{str(i).zfill(2)}-phase.txt', dtype=str, skiprows=1)
+            curr_phase = np.delete(curr_phase, np.where(curr_phase[:, 0].astype(int) % 25 != 0), axis=0)
             curr_phase = np.delete(curr_phase, 0, axis=1)
             curr_phase = np.concatenate((full_phase, curr_phase))
             curr_phase = curr_phase.flatten()

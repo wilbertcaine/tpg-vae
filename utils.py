@@ -87,10 +87,10 @@ def sequence_input(seq, dtype):
 
 def normalize_data(opt, dtype, sequence):
     if opt.dataset == 'smmnist' or opt.dataset == 'kth' or opt.dataset == 'bair' or opt.dataset == 'cholec80' :
-        sequence.transpose_(0, 1)
-        sequence.transpose_(3, 4).transpose_(2, 3)
+        sequence[2].transpose_(0, 1)
+        sequence[2].transpose_(3, 4).transpose_(2, 3)
     else:
-        sequence.transpose_(0, 1)
+        sequence[2].transpose_(0, 1)
 
     return sequence_input(sequence, dtype)
 

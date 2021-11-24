@@ -55,9 +55,9 @@ if cuda_is_available:
 else:
     dtype = torch.FloatTensor
 
-device_ids = opt.gpu_id # 0, 1, 2, 3
+device_ids = [opt.gpu_id] # 0, 1, 2, 3
 # device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
-device = torch.device('cuda:{}'.format(device_ids) if cuda_is_available else "cpu")
+device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
 
 if opt.model_dir != '':
     # load model and continue training from checkpoint
@@ -369,7 +369,7 @@ for epoch in range(opt.niter):
     # progress = progressbar.ProgressBar(max_value=opt.epoch_size).start()
     for i in range(opt.epoch_size):
         # progress.update(i+1)
-        x = next(training_batch_generator)
+        x = next(training_batch_generator)[2]
 
         # train frame_predictor
         mse, kld = train(x)
