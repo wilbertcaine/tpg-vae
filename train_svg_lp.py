@@ -55,9 +55,9 @@ if cuda_is_available:
 else:
     dtype = torch.FloatTensor
 
-# device_ids = [1] # 0, 1, 2, 3
+device_ids = opt.gpu_id # 0, 1, 2, 3
 # device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
-device = torch.device('cuda:{}'.format(opt.gpu_id) if cuda_is_available else "cpu")
+device = torch.device('cuda:{}'.format(device_ids) if cuda_is_available else "cpu")
 
 if opt.model_dir != '':
     # load model and continue training from checkpoint
