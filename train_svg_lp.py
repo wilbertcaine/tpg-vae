@@ -11,8 +11,8 @@ import itertools
 import progressbar
 import numpy as np
 from torch.nn import DataParallel
-
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 parser = argparse.ArgumentParser()
@@ -44,6 +44,7 @@ parser.add_argument('--model', default='dcgan', help='model type (dcgan | vgg)')
 parser.add_argument('--data_threads', type=int, default=5, help='number of data loading threads')
 parser.add_argument('--num_digits', type=int, default=2, help='number of digits for moving mnist')
 parser.add_argument('--last_frame_skip', action='store_true', help='if true, skip connections go between frame t and frame t+t rather than last ground truth frame')
+parser.add_argument('--gpu_id', type=int, default=0, help='(single) gpu id')
 
 opt = parser.parse_args()
 
@@ -54,8 +55,9 @@ if cuda_is_available:
 else:
     dtype = torch.FloatTensor
 
-device_ids = [1] # 0, 1, 2, 3
-device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
+# device_ids = [1] # 0, 1, 2, 3
+# device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
+device = torch.device('cuda:{}'.format(opt.gpu_id) if cuda_is_available else "cpu")
 
 if opt.model_dir != '':
     # load model and continue training from checkpoint

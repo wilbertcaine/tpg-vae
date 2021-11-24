@@ -10,6 +10,10 @@ import utils
 import itertools
 import progressbar
 import numpy as np
+from torch.nn import DataParallel
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=0.002, type=float, help='learning rate')
@@ -42,6 +46,17 @@ parser.add_argument('--last_frame_skip', action='store_true', help='if true, ski
 
 
 opt = parser.parse_args()
+
+cuda_is_available = torch.cuda.is_available()
+if cuda_is_available:
+    torch.cuda.manual_seed_all(opt.seed)
+    dtype = torch.cuda.FloatTensor
+else:
+    dtype = torch.FloatTensor
+
+device_ids = [1] # 0, 1, 2, 3
+device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
+
 if opt.model_dir != '':
     saved_model = torch.load('%s/model.pth' % opt.model_dir)
     optimizer = opt.optimizer

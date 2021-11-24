@@ -10,10 +10,10 @@ class Cholec80(object):
         self.root_dir = data_root
         if train:
             self.video_ids = list(range(1, 41))
-            self.ordered = True # False
+            self.ordered = False # True
         else:
             self.video_ids = list(range(41, 81))
-            self.ordered = True
+            self.ordered = False
         self.dirs = []
         self.len = 0
 
