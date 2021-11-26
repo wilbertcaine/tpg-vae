@@ -95,7 +95,10 @@ class Cholec80(object):
             image_seq.append(im / 255.)
 
             if i == 0:
-                prev_gray_im = gray_im
+                prev_fname = self.dirs[self.video_id][self.frame_id - 1]
+                prev_im = imread(prev_fname)
+                prev_gray_im = T.Grayscale()(Image.fromarray(prev_im))
+                prev_gray_im = np.asarray(prev_gray_im)
             gray_im -= prev_gray_im
             gray_im = gray_im.reshape(1, 64, 64, 1)
             motion_seq.append(gray_im / 255.)
