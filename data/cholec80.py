@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 from imageio import imread
-
+import torchvision.transforms as T
 
 class Cholec80(object):
     def __init__(self, data_root, train=True, seq_len=20, image_size=64):
@@ -78,18 +78,33 @@ class Cholec80(object):
         else:
             self.video_id = np.random.randint(0, len(self.video_ids) - 1)
             max_start_frame_id = len(self.dirs[self.video_id]) - self.seq_len
-            self.frame_id = np.random.randint(0, max_start_frame_id)
+            self.frame_id = np.random.randint(1, max_start_frame_id)
 
         tool_seq = self.tool_annotations[self.video_id][self.frame_id : self.frame_id + self.seq_len]
         phase_seq = self.phase_annotations[self.video_id][self.frame_id : self.frame_id + self.seq_len]
         image_seq = []
+        motion_seq = []
         for i in range(self.seq_len):
             fname = self.dirs[self.video_id][self.frame_id + i]
-            im = imread(fname).reshape(1, 64, 64, 3)
-            image_seq.append(im / 255.)
-        image_seq = np.concatenate(image_seq, axis=0)
+            im = imread(fname)
+            gray_im = T.Grayscale()(Image.fromarray(im))
+            gray_im = np.asarray(gray_im)
+            curr_gray_im = gray_im
 
-        return [tool_seq, phase_seq, image_seq]
+            im = im.reshape(1, 64, 64, 3)
+            image_seq.append(im / 255.)
+
+            if i == 0:
+                prev_gray_im = gray_im
+            gray_im -= prev_gray_im
+            gray_im = gray_im.reshape(1, 64, 64, 1)
+            motion_seq.append(gray_im / 255.)
+            prev_gray_im = curr_gray_im
+
+        image_seq = np.concatenate(image_seq, axis=0)
+        motion_seq = np.concatenate(motion_seq, axis=0)
+
+        return [tool_seq, phase_seq, image_seq, motion_seq]
 
     def __getitem__(self, index):
         self.set_seed(index)
