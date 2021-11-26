@@ -3,9 +3,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 class lstm(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, n_layers, batch_size, device):
+    def __init__(self, input_size, output_size, hidden_size, n_layers, batch_size):
         super(lstm, self).__init__()
-        self.device = device
         self.input_size = input_size
         self.output_size = output_size
         self.hidden_size = hidden_size
@@ -23,8 +22,8 @@ class lstm(nn.Module):
         hidden = []
         for i in range(self.n_layers):
             # if torch.cuda.is_available():
-            hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size).to(self.device)),
-                           Variable(torch.zeros(self.batch_size, self.hidden_size).to(self.device))))
+            hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size)),
+                           Variable(torch.zeros(self.batch_size, self.hidden_size))))
                 # hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size).cuda()),
                 #                Variable(torch.zeros(self.batch_size, self.hidden_size).cuda())))
             # else:
@@ -42,9 +41,8 @@ class lstm(nn.Module):
         return self.output(h_in)
 
 class gaussian_lstm(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, n_layers, batch_size, device):
+    def __init__(self, input_size, output_size, hidden_size, n_layers, batch_size):
         super(gaussian_lstm, self).__init__()
-        self.device = device
         self.input_size = input_size
         self.output_size = output_size
         self.hidden_size = hidden_size
@@ -60,8 +58,8 @@ class gaussian_lstm(nn.Module):
         hidden = []
         for i in range(self.n_layers):
             # if torch.cuda.is_available():
-            hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size).to(self.device)),
-                           Variable(torch.zeros(self.batch_size, self.hidden_size).to(self.device))))
+            hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size)),
+                           Variable(torch.zeros(self.batch_size, self.hidden_size))))
                 # hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size).cuda()),
                 #                Variable(torch.zeros(self.batch_size, self.hidden_size).cuda())))
             # else:

@@ -45,7 +45,7 @@ parser.add_argument('--model', default='dcgan', help='model type (dcgan | vgg)')
 parser.add_argument('--data_threads', type=int, default=5, help='number of data loading threads')
 parser.add_argument('--num_digits', type=int, default=2, help='number of digits for moving mnist')
 parser.add_argument('--last_frame_skip', action='store_true', help='if true, skip connections go between frame t and frame t+t rather than last ground truth frame')
-parser.add_argument('--gpu_id', type=int, default=0, help='(single) gpu id')
+parser.add_argument('--gpu_id', type=list, default=0, help='(single) gpu id')
 
 opt = parser.parse_args()
 
@@ -56,7 +56,7 @@ if cuda_is_available:
 else:
     dtype = torch.FloatTensor
 
-device_ids = [opt.gpu_id]
+device_ids = [1,2]
 device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
 
 if opt.model_dir != '':
@@ -104,11 +104,11 @@ if opt.model_dir != '':
     posterior = saved_model['posterior']
     prior = saved_model['prior']
 else:
-    frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size,device)
-    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size,device)
-    prior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size,device)
-    posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size,device)
-    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size,device)
+    frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size//len(device_ids))
+    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids))
+    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids))
+    posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids))
+    prior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids))
     frame_predictor.apply(utils.init_weights)
     posterior.apply(utils.init_weights)
     prior.apply(utils.init_weights)
@@ -290,12 +290,13 @@ def plot(x, epoch):
 def plot_rec(x, epoch):
     frame_predictor.module.hidden = frame_predictor.module.init_hidden()
     posterior.module.hidden = posterior.module.init_hidden()
+    posterior_motion.module.hidden = posterior_motion.module.init_hidden()
     gen_seq = []
     gen_seq.append(x[0])
     x_in = x[0]
     for i in range(1, opt.n_past+opt.n_future):
-        h = encoder(x[i-1])
-        h_target = encoder(x[i])
+        h = encoder(x[2][i-1])
+        h_target = encoder(x[2][i])
         if opt.last_frame_skip or i < opt.n_past:
             h, skip = h
         else:
@@ -353,16 +354,17 @@ def train(x):
         c_t, mu_c, logvar_c = posterior(h_target)
         _, mu_p_c, logvar_p_c = prior(h)
 
-        h_motion = encoder(x[3][i-1])
-        h_motion_target = encoder(x[3][i])[0]
+        h_motion = encoder_motion(x[3][i-1])
+        h_motion_target = encoder_motion(x[3][i])[0]
         if opt.last_frame_skip or i < opt.n_past:
             h_motion, skip = h_motion
         else:
             h_motion = h_motion[0]
-        m_t, mu_m, logvar_m = posterior(h_motion_target)
-        _, mu_p_m, logvar_p_m = prior(h_motion)
+        m_t, mu_m, logvar_m = posterior_motion(h_motion_target)
+        _, mu_p_m, logvar_p_m = prior_motion(h_motion)
 
-        h_pred = frame_predictor(torch.cat([h, c_t, m_t, x[1]], 1))
+        l_t = x[1][i].to(device)
+        h_pred = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1))
         x_pred = decoder([h_pred, skip])
         mse += mse_criterion(x_pred, x[2][i])
         kld += kl_criterion(mu_c, logvar_c, mu_p_c, logvar_p_c) + kl_criterion(mu_m, logvar_m, mu_p_m, logvar_p_m)

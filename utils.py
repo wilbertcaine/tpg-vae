@@ -86,11 +86,17 @@ def sequence_input(seq, dtype):
     return [Variable(x.type(dtype)) for x in seq]
 
 def normalize_data(opt, dtype, sequence):
-    if opt.dataset == 'smmnist' or opt.dataset == 'kth' or opt.dataset == 'bair' or opt.dataset == 'cholec80' :
-        sequence[2].transpose_(0, 1)
-        sequence[2].transpose_(3, 4).transpose_(2, 3)
+    if opt.dataset == 'smmnist' or opt.dataset == 'kth' or opt.dataset == 'bair' :
+        sequence.transpose_(0, 1)
+        sequence.transpose_(3, 4).transpose_(2, 3)
+    elif opt.dataset == 'cholec80' :
+        for i in range(0, 2):
+            sequence[i].transpose_(0, 1)
+        for i in range(2, 4):
+            sequence[i].transpose_(0, 1)
+            sequence[i].transpose_(3, 4).transpose_(2, 3)
     else:
-        sequence[2].transpose_(0, 1)
+        sequence.transpose_(0, 1)
 
     return sequence_input(sequence, dtype)
 

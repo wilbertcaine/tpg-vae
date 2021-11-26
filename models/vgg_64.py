@@ -57,7 +57,7 @@ class encoder(nn.Module):
 
 class encoder_motion(nn.Module):
     def __init__(self, dim, nc=1):
-        super(encoder, self).__init__()
+        super(encoder_motion, self).__init__()
         self.dim = dim
         # 64 x 64
         self.c1 = nn.Sequential(
