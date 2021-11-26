@@ -55,6 +55,42 @@ class encoder(nn.Module):
         h5 = self.c5(self.mp(h4)) # 4 -> 1
         return h5.view(-1, self.dim), [h1, h2, h3, h4]
 
+class encoder_motion(nn.Module):
+    def __init__(self, dim, nc=1):
+        super(encoder, self).__init__()
+        self.dim = dim
+        # 64 x 64
+        self.c1 = nn.Sequential(
+                vgg_layer(nc, 64),
+                )
+        # 32 x 32
+        self.c2 = nn.Sequential(
+                vgg_layer(64, 128),
+                )
+        # 16 x 16
+        self.c3 = nn.Sequential(
+                vgg_layer(128, 256),
+                )
+        # 8 x 8
+        self.c4 = nn.Sequential(
+                vgg_layer(256, 512),
+                )
+        # 4 x 4
+        self.c5 = nn.Sequential(
+                nn.Conv2d(512, dim, 4, 1, 0),
+                nn.BatchNorm2d(dim),
+                nn.Tanh()
+                )
+        self.mp = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+
+    def forward(self, input):
+        h1 = self.c1(input) # 64 -> 32
+        h2 = self.c2(self.mp(h1)) # 32 -> 16
+        h3 = self.c3(self.mp(h2)) # 16 -> 8
+        h4 = self.c4(self.mp(h3)) # 8 -> 4
+        h5 = self.c5(self.mp(h4)) # 4 -> 1
+        return h5.view(-1, self.dim), [h1, h2, h3, h4]
+
 
 class decoder(nn.Module):
     def __init__(self, dim, nc=1):

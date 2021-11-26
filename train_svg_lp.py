@@ -129,6 +129,7 @@ if opt.model_dir != '':
     encoder = saved_model['encoder']
 else:
     encoder = model.encoder(opt.g_dim, opt.channels)
+    encoder_motion = model.encoder_motion(opt.g_dim, opt.channels)
     decoder = model.decoder(opt.g_dim, opt.channels)
     encoder.apply(utils.init_weights)
     decoder.apply(utils.init_weights)
