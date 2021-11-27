@@ -1,8 +1,11 @@
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"]="1, 2"
+
 import torch
 import torch.optim as optim
 import torch.nn as nn
 import argparse
-import os
 import random
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -45,7 +48,7 @@ parser.add_argument('--model', default='dcgan', help='model type (dcgan | vgg)')
 parser.add_argument('--data_threads', type=int, default=5, help='number of data loading threads')
 parser.add_argument('--num_digits', type=int, default=2, help='number of digits for moving mnist')
 parser.add_argument('--last_frame_skip', action='store_true', help='if true, skip connections go between frame t and frame t+t rather than last ground truth frame')
-parser.add_argument('--gpu_id', type=list, default=0, help='(single) gpu id')
+parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
 opt = parser.parse_args()
 
@@ -56,7 +59,12 @@ if cuda_is_available:
 else:
     dtype = torch.FloatTensor
 
-device_ids = [1,2]
+str_ids = opt.gpu_ids.split(',')
+device_ids = []
+for str_id in str_ids:
+    id = int(str_id)
+    if id >= 0:
+        device_ids.append(id)
 device = torch.device('cuda:{}'.format(device_ids[0]) if cuda_is_available else "cpu")
 
 if opt.model_dir != '':
@@ -104,11 +112,11 @@ if opt.model_dir != '':
     posterior = saved_model['posterior']
     prior = saved_model['prior']
 else:
-    frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size//len(device_ids))
-    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids))
-    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids))
-    posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids))
-    prior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids))
+    frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size//len(device_ids), device)
+    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), device)
+    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), device)
+    posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), device)
+    prior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), device)
     frame_predictor.apply(utils.init_weights)
     posterior.apply(utils.init_weights)
     prior.apply(utils.init_weights)
@@ -336,11 +344,21 @@ def train(x):
     decoder.zero_grad()
 
     # initialize the hidden state.
-    frame_predictor.module.hidden = frame_predictor.module.init_hidden()
-    posterior.module.hidden = posterior.module.init_hidden()
-    prior.module.hidden = prior.module.init_hidden()
-    posterior_motion.module.hidden = posterior_motion.module.init_hidden()
-    prior_motion.module.hidden = prior.module.init_hidden()
+    # frame_predictor.module.hidden = frame_predictor.module.init_hidden()
+    # posterior.module.hidden = posterior.module.init_hidden()
+    # prior.module.hidden = prior.module.init_hidden()
+    # posterior_motion.module.hidden = posterior_motion.module.init_hidden()
+    # prior_motion.module.hidden = prior.module.init_hidden()
+    # frame_predictor.module.init_hidden_new()
+    # posterior.module.init_hidden_new()
+    # prior.module.init_hidden_new()
+    # posterior_motion.module.init_hidden_new()
+    # prior.module.init_hidden_new()
+    frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
+    posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
+    prior_hidden = prior.module.init_hidden(opt.batch_size, device)
+    posterior_motion_hidden = posterior_motion.module.init_hidden(opt.batch_size, device)
+    prior_motion_hidden = prior.module.init_hidden(opt.batch_size, device)
 
     mse = 0
     kld = 0
@@ -351,8 +369,8 @@ def train(x):
             h, skip = h
         else:
             h = h[0]
-        c_t, mu_c, logvar_c = posterior(h_target)
-        _, mu_p_c, logvar_p_c = prior(h)
+        c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
+        _, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
 
         h_motion = encoder_motion(x[3][i-1])
         h_motion_target = encoder_motion(x[3][i])[0]
@@ -360,15 +378,17 @@ def train(x):
             h_motion, skip = h_motion
         else:
             h_motion = h_motion[0]
-        m_t, mu_m, logvar_m = posterior_motion(h_motion_target)
-        _, mu_p_m, logvar_p_m = prior_motion(h_motion)
+        m_t, mu_m, logvar_m, posterior_motion_hidden = posterior_motion(h_motion_target, posterior_motion_hidden)
+        _, mu_p_m, logvar_p_m, prior_motion_hidden = prior_motion(h_motion, prior_motion_hidden)
 
         l_t = x[1][i].to(device)
-        h_pred = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1))
+        h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1), frame_predictor_hidden)
         x_pred = decoder([h_pred, skip])
         mse += mse_criterion(x_pred, x[2][i])
         kld += kl_criterion(mu_c, logvar_c, mu_p_c, logvar_p_c) + kl_criterion(mu_m, logvar_m, mu_p_m, logvar_p_m)
 
+    mse = mse.sum()
+    kld = kld.sum()
     loss = mse + kld*opt.beta
     loss.backward()
 
@@ -399,6 +419,8 @@ for epoch in range(opt.niter):
     for i in range(opt.epoch_size):
         # progress.update(i+1)
         x = next(training_batch_generator)
+        for i in range(4):
+            x[i] = x[i].to(device)
 
         # train frame_predictor
         mse, kld = train(x)
