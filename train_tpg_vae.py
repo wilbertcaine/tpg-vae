@@ -113,10 +113,10 @@ if opt.model_dir != '':
     prior = saved_model['prior']
 else:
     frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size//len(device_ids), device)
-    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), device)
-    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), device)
-    posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), device)
-    prior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), device)
+    posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), False)
+    prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), False)
+    posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), False)
+    prior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), False)
     frame_predictor.apply(utils.init_weights)
     posterior.apply(utils.init_weights)
     prior.apply(utils.init_weights)
@@ -216,37 +216,64 @@ testing_batch_generator = get_testing_batch()
 
 # --------- plotting funtions ------------------------------------
 def plot(x, epoch):
-    nsample = 20
+    # nsample = 20
     gen_seq = [[] for i in range(nsample)]
-    gt_seq = [x[i] for i in range(len(x))]
+    gt_seq = [x[2][i] for i in range(len(x))]
 
     for s in range(nsample):
-        frame_predictor.module.hidden = frame_predictor.module.init_hidden()
-        posterior.module.hidden = posterior.module.init_hidden()
-        prior.module.hidden = prior.module.init_hidden()
-        posterior_motion.module.hidden = posterior_motion.module.init_hidden()
-        prior_motion.module.hidden = prior_motion.module.init_hidden()
-        gen_seq[s].append(x[0])
-        x_in = x[0]
+        # frame_predictor.module.hidden = frame_predictor.module.init_hidden()
+        # posterior.module.hidden = posterior.module.init_hidden()
+        # prior.module.hidden = prior.module.init_hidden()
+        # posterior_motion.module.hidden = posterior_motion.module.init_hidden()
+        # prior_motion.module.hidden = prior_motion.module.init_hidden()
+        frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
+        posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
+        prior_hidden = prior.module.init_hidden(opt.batch_size, device)
+        posterior_motion_hidden = posterior_motion.module.init_hidden(opt.batch_size, device)
+        prior_motion_hidden = prior.module.init_hidden(opt.batch_size, device)
+        gen_seq[s].append(x[2][0])
+        x_in = x[2][0]
+        x_in_motion = x[3][0]
         for i in range(1, opt.n_eval):
             h = encoder(x_in)
+            h_motion = encoder_motion(x_in_motion)
             if opt.last_frame_skip or i < opt.n_past:
                 h, skip = h
+                h_motion, skip = h_motion
             else:
                 h, _ = h
-            h = h.detach()
+                h_motion = h_motion[0]
+            # h = h.detach()
             if i < opt.n_past:
-                h_target = encoder(x[i])
-                h_target = h_target[0].detach()
-                z_t, _, _ = posterior(h_target)
-                prior(h)
-                frame_predictor(torch.cat([h, z_t], 1))
-                x_in = x[i]
+                h_target = encoder(x[2][i])
+                # h_target = h_target[0].detach()
+                h_target = h_target[0]
+                h_motion_target = encoder_motion(x[3][i])[0]
+                # z_t, _, _ = posterior(h_target)
+                c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
+                m_t, mu_m, logvar_m, posterior_motion_hidden = posterior_motion(h_motion_target,
+                                                                                posterior_motion_hidden)
+                # prior(h)
+                _, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
+                _, mu_p_m, logvar_p_m, prior_motion_hidden = prior_motion(h_motion, prior_motion_hidden)
+                # frame_predictor(torch.cat([h, z_t], 1))
+                l_t = x[1][i].to(device)
+                h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1),
+                                                                 frame_predictor_hidden)
+                # x_in = x[i]
+                x_in = x[2][i]
+                x_in_motion = x[3][i]
                 gen_seq[s].append(x_in)
             else:
-                z_t, _, _ = prior(h)
-                h = frame_predictor(torch.cat([h, z_t], 1)).detach()
-                x_in = decoder([h, skip]).detach()
+                # z_t, _, _ = prior(h)
+                _, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
+                _, mu_p_m, logvar_p_m, prior_motion_hidden = prior_motion(h_motion, prior_motion_hidden)
+                # h = frame_predictor(torch.cat([h, z_t], 1)).detach()
+                l_t = x[1][i].to(device)
+                h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1),
+                                                                 frame_predictor_hidden)
+                # x_in = decoder([h, skip]).detach()
+                x_in = decoder([h_pred, skip])
                 gen_seq[s].append(x_in)
 
     to_plot = []
@@ -296,11 +323,14 @@ def plot(x, epoch):
 
 
 def plot_rec(x, epoch):
-    frame_predictor.module.hidden = frame_predictor.module.init_hidden()
-    posterior.module.hidden = posterior.module.init_hidden()
-    posterior_motion.module.hidden = posterior_motion.module.init_hidden()
+    # frame_predictor.module.hidden = frame_predictor.module.init_hidden()
+    # posterior.module.hidden = posterior.module.init_hidden()
+    # posterior_motion.module.hidden = posterior_motion.module.init_hidden()
+    frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
+    posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
+    posterior_motion_hidden = posterior_motion.module.init_hidden(opt.batch_size, device)
     gen_seq = []
-    gen_seq.append(x[0])
+    gen_seq.append(x[2][0])
     x_in = x[0]
     for i in range(1, opt.n_past+opt.n_future):
         h = encoder(x[2][i-1])
@@ -310,15 +340,25 @@ def plot_rec(x, epoch):
         else:
             h, _ = h
         h_target, _ = h_target
-        h = h.detach()
-        h_target = h_target.detach()
-        z_t, _, _= posterior(h_target)
-        if i < opt.n_past:
-            frame_predictor(torch.cat([h, z_t], 1))
-            gen_seq.append(x[i])
+        # h = h.detach()
+        # h_target = h_target.detach()
+        c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
+
+        h_motion = encoder_motion(x[3][i-1])
+        h_motion_target = encoder_motion(x[3][i])[0]
+        if opt.last_frame_skip or i < opt.n_past:
+            h_motion, skip = h_motion
         else:
-            h_pred = frame_predictor(torch.cat([h, z_t], 1))
-            x_pred = decoder([h_pred, skip]).detach()
+            h_motion = h_motion[0]
+        m_t, mu_m, logvar_m, posterior_motion_hidden = posterior_motion(h_motion_target, posterior_motion_hidden)
+
+        l_t = x[1][i].to(device)
+        if i < opt.n_past:
+            _, frame_predictor_hidden = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1), frame_predictor_hidden)
+            gen_seq.append(x[2][i])
+        else:
+            h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1), frame_predictor_hidden)
+            x_pred = decoder([h_pred, skip])
             gen_seq.append(x_pred)
 
     to_plot = []
@@ -441,6 +481,8 @@ for epoch in range(opt.niter):
     prior.eval()
 
     x = next(testing_batch_generator)
+    for i in range(4):
+        x[i] = x[i].to(device)
     plot(x, epoch)
     plot_rec(x, epoch)
 
