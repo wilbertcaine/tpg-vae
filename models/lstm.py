@@ -103,5 +103,7 @@ class gaussian_lstm(nn.Module):
         logvar = self.logvar_net(h_in)
         if self.reparam:
             z = self.reparameterize(mu, logvar)
+        else:
+            z = mu
         return z, mu, logvar, hidden
             

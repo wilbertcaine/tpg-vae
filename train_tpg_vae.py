@@ -1,6 +1,6 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"]="1, 2"
+os.environ["CUDA_VISIBLE_DEVICES"]="0, 1, 2, 3"
 
 import torch
 import torch.optim as optim
@@ -19,23 +19,23 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--lr', default=0.002, type=float, help='learning rate')
-parser.add_argument('--beta1', default=0.9, type=float, help='momentum term for adam')
+parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
+parser.add_argument('--beta1', default=0.0001, type=float, help='momentum term for adam')
 parser.add_argument('--batch_size', default=100, type=int, help='batch size')
-parser.add_argument('--log_dir', default='logs/lp', help='base directory to save logs')
+parser.add_argument('--log_dir', default='logs/tpg_vae', help='base directory to save logs')
 parser.add_argument('--model_dir', default='', help='base directory to save logs')
 parser.add_argument('--name', default='', help='identifier for directory')
-parser.add_argument('--data_root', default='data', help='root directory for data')
+parser.add_argument('--data_root', default='dataset/Cholec80', help='root directory for data')
 parser.add_argument('--optimizer', default='adam', help='optimizer to train with')
-parser.add_argument('--niter', type=int, default=300, help='number of epochs to train for')
+parser.add_argument('--niter', type=int, default=200, help='number of epochs to train for')
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
 parser.add_argument('--epoch_size', type=int, default=600, help='epoch size')
 parser.add_argument('--image_width', type=int, default=64, help='the height / width of the input image to network')
-parser.add_argument('--channels', default=1, type=int)
-parser.add_argument('--dataset', default='smmnist', help='dataset to train with')
-parser.add_argument('--n_past', type=int, default=5, help='number of frames to condition on')
+parser.add_argument('--channels', default=3, type=int)
+parser.add_argument('--dataset', default='cholec80', help='dataset to train with')
+parser.add_argument('--n_past', type=int, default=10, help='number of frames to condition on')
 parser.add_argument('--n_future', type=int, default=10, help='number of frames to predict during training')
-parser.add_argument('--n_eval', type=int, default=30, help='number of frames to predict during eval')
+parser.add_argument('--n_eval', type=int, default=20, help='number of frames to predict during eval')
 parser.add_argument('--rnn_size', type=int, default=256, help='dimensionality of hidden layer')
 parser.add_argument('--prior_rnn_layers', type=int, default=1, help='number of layers')
 parser.add_argument('--posterior_rnn_layers', type=int, default=1, help='number of layers')
@@ -44,8 +44,8 @@ parser.add_argument('--z_dim', type=int, default=16, help='dimensionality of z_t
 parser.add_argument('--l_dim', type=int, default=7, help='dimensionality of l_t')
 parser.add_argument('--g_dim', type=int, default=128, help='dimensionality of encoder output vector and decoder input vector')
 parser.add_argument('--beta', type=float, default=0.0001, help='weighting on KL to prior')
-parser.add_argument('--model', default='dcgan', help='model type (dcgan | vgg)')
-parser.add_argument('--data_threads', type=int, default=5, help='number of data loading threads')
+parser.add_argument('--model', default='vgg', help='model type (dcgan | vgg)')
+parser.add_argument('--data_threads', type=int, default=20, help='number of data loading threads')
 parser.add_argument('--num_digits', type=int, default=2, help='number of digits for moving mnist')
 parser.add_argument('--last_frame_skip', action='store_true', help='if true, skip connections go between frame t and frame t+t rather than last ground truth frame')
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
@@ -82,7 +82,8 @@ else:
     if opt.dataset == 'smmnist':
         opt.log_dir = '%s/%s-%d/%s' % (opt.log_dir, opt.dataset, opt.num_digits, name)
     else:
-        opt.log_dir = '%s/%s/%s' % (opt.log_dir, opt.dataset, name)
+        # opt.log_dir = '%s/%s/%s' % (opt.log_dir, opt.dataset, name)
+        opt.log_dir = '%s/%s' % (opt.log_dir, name)
 
 os.makedirs('%s/gen/' % opt.log_dir, exist_ok=True)
 os.makedirs('%s/plots/' % opt.log_dir, exist_ok=True)
@@ -112,7 +113,7 @@ if opt.model_dir != '':
     posterior = saved_model['posterior']
     prior = saved_model['prior']
 else:
-    frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size//len(device_ids), device)
+    frame_predictor = lstm_models.lstm(opt.g_dim+2*opt.z_dim+opt.l_dim, opt.g_dim, opt.rnn_size, opt.predictor_rnn_layers, opt.batch_size//len(device_ids))
     posterior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), False)
     prior = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.prior_rnn_layers, opt.batch_size//len(device_ids), False)
     posterior_motion = lstm_models.gaussian_lstm(opt.g_dim, opt.z_dim, opt.rnn_size, opt.posterior_rnn_layers, opt.batch_size//len(device_ids), False)
@@ -217,8 +218,9 @@ testing_batch_generator = get_testing_batch()
 # --------- plotting funtions ------------------------------------
 def plot(x, epoch):
     # nsample = 20
+    nsample = 1
     gen_seq = [[] for i in range(nsample)]
-    gt_seq = [x[2][i] for i in range(len(x))]
+    gt_seq = [x[2][i] for i in range(len(x[2]))]
 
     for s in range(nsample):
         # frame_predictor.module.hidden = frame_predictor.module.init_hidden()
@@ -266,8 +268,8 @@ def plot(x, epoch):
                 gen_seq[s].append(x_in)
             else:
                 # z_t, _, _ = prior(h)
-                _, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
-                _, mu_p_m, logvar_p_m, prior_motion_hidden = prior_motion(h_motion, prior_motion_hidden)
+                p_c, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
+                p_m, mu_p_m, logvar_p_m, prior_motion_hidden = prior_motion(h_motion, prior_motion_hidden)
                 # h = frame_predictor(torch.cat([h, z_t], 1)).detach()
                 l_t = x[1][i].to(device)
                 h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, c_t, m_t, l_t], 1),
@@ -296,11 +298,12 @@ def plot(x, epoch):
                 min_mse = mse
                 min_idx = s
 
-        s_list = [min_idx,
-                  np.random.randint(nsample),
-                  np.random.randint(nsample),
-                  np.random.randint(nsample),
-                  np.random.randint(nsample)]
+        # s_list = [min_idx,
+        #           np.random.randint(nsample),
+        #           np.random.randint(nsample),
+        #           np.random.randint(nsample),
+        #           np.random.randint(nsample)]
+        s_list = [0]
         for ss in range(len(s_list)):
             s = s_list[ss]
             row = []
@@ -486,16 +489,16 @@ for epoch in range(opt.niter):
     plot(x, epoch)
     plot_rec(x, epoch)
 
-    # save the model
-    torch.save({
-        'encoder': encoder,
-        'decoder': decoder,
-        'frame_predictor': frame_predictor,
-        'posterior': posterior,
-        'prior': prior,
-        'opt': opt},
-        '%s/model.pth' % opt.log_dir)
-    if epoch % 10 == 0:
+    if epoch % 5 == 0:
         print('log dir: %s' % opt.log_dir)
+        # save the model
+        torch.save({
+            'encoder': encoder,
+            'decoder': decoder,
+            'frame_predictor': frame_predictor,
+            'posterior': posterior,
+            'prior': prior,
+            'opt': opt},
+            '%s/ckpt/model_%d.pth' % (opt.log_dir, epoch))
 
 
