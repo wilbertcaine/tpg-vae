@@ -1,6 +1,6 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"]="0, 1, 2, 3"
+os.environ["CUDA_VISIBLE_DEVICES"]="1, 2"
 
 import torch
 import torch.optim as optim
@@ -87,6 +87,7 @@ else:
 
 os.makedirs('%s/gen/' % opt.log_dir, exist_ok=True)
 os.makedirs('%s/plots/' % opt.log_dir, exist_ok=True)
+os.makedirs('%s/ckpt/' % opt.log_dir, exist_ok=True)
 
 print("Random Seed: ", opt.seed)
 random.seed(opt.seed)
@@ -489,7 +490,7 @@ for epoch in range(opt.niter):
     plot(x, epoch)
     plot_rec(x, epoch)
 
-    if epoch % 5 == 0:
+    if (epoch+1) % 5 == 0:
         print('log dir: %s' % opt.log_dir)
         # save the model
         torch.save({
@@ -499,6 +500,6 @@ for epoch in range(opt.niter):
             'posterior': posterior,
             'prior': prior,
             'opt': opt},
-            '%s/ckpt/model_%d.pth' % (opt.log_dir, epoch))
+            '%s/ckpt/model_%d.pth' % (opt.log_dir, (epoch+1)))
 
 
