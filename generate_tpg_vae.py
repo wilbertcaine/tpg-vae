@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', default=100, type=int, help='batch size')
 parser.add_argument('--data_root', default='dataset/Cholec80', help='root directory for data')
 parser.add_argument('--model_path', default='', help='path to model')
-parser.add_argument('--log_dir', default='logs', help='directory to save generations to')
+parser.add_argument('--log_dir', default='logs/tpg_vae', help='directory to save generations to')
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
 parser.add_argument('--n_past', type=int, default=5, help='number of frames to condition on')
 parser.add_argument('--n_future', type=int, default=10, help='number of frames to predict')
@@ -86,21 +86,24 @@ opt.num_digits = tmp['opt'].num_digits
 # prior.cuda()
 # encoder.cuda()
 # decoder.cuda()
-frame_predictor = frame_predictor.module
-posterior = posterior.module
-prior = prior.module
-encoder = encoder.module
-decoder = decoder.module
 frame_predictor = DataParallel(frame_predictor, device_ids = device_ids)
 frame_predictor.to(device)
 posterior = DataParallel(posterior, device_ids = device_ids)
 posterior.to(device)
 prior = DataParallel(prior, device_ids = device_ids)
 prior.to(device)
+posterior_motion = DataParallel(posterior_motion, device_ids = device_ids)
+posterior_motion.to(device)
+prior_motion = DataParallel(prior_motion, device_ids = device_ids)
+prior_motion.to(device)
 encoder = DataParallel(encoder, device_ids = device_ids)
 encoder.to(device)
+encoder_motion = DataParallel(encoder_motion, device_ids = device_ids)
+encoder_motion.to(device)
 decoder = DataParallel(decoder, device_ids = device_ids)
 decoder.to(device)
+mse_criterion = DataParallel(mse_criterion, device_ids = device_ids)
+mse_criterion.to(device)
 
 # ---------------- set the options ----------------
 opt.dataset = tmp['opt'].dataset
@@ -145,45 +148,27 @@ testing_batch_generator = get_testing_batch()
 
 def make_gifs(x, idx, name):
     # get approx posterior sample
-    # frame_predictor.hidden = frame_predictor.init_hidden()
-    # posterior.hidden = posterior.init_hidden()
-    # frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
-    # posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
-    with torch.no_grad():
-        for i in range(frame_predictor.module.n_layers):
-            frame_predictor.module.hidden[i][0].fill_(0)
-            frame_predictor.module.hidden[i][1].fill_(0)
-        for i in range(posterior.module.n_layers):
-            posterior.module.hidden[i][0].fill_(0)
-            posterior.module.hidden[i][1].fill_(0)
+    frame_predictor.hidden = frame_predictor.init_hidden()
+    posterior.hidden = posterior.init_hidden()
     posterior_gen = []
-    posterior_gen.append(x[2][0])
-    x_in = x[2][0]
+    posterior_gen.append(x[0])
+    x_in = x[0]
     for i in range(1, opt.n_eval):
         h = encoder(x_in)
-        # h_target = encoder(x[i])[0].detach()
-        h_target = encoder(x[2][i])
-        h_target = h_target[0]
+        h_target = encoder(x[i])[0].detach()
         if opt.last_frame_skip or i < opt.n_past:	
             h, skip = h
         else:
             h, _ = h
-        # h = h.detach()
-        # _, z_t, _= posterior(h_target) # take the mean
-        c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
+        h = h.detach()
+        _, z_t, _= posterior(h_target) # take the mean
         if i < opt.n_past:
-            # frame_predictor(torch.cat([h, z_t], 1))
-            h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),
-                                                             frame_predictor_hidden)
-            posterior_gen.append(x[2][i])
-            # x_in = x[i]
-            x_in = x[2][i]
+            frame_predictor(torch.cat([h, z_t], 1)) 
+            posterior_gen.append(x[i])
+            x_in = x[i]
         else:
-            # h_pred = frame_predictor(torch.cat([h, z_t], 1)).detach()
-            h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),
-                                                             frame_predictor_hidden)
-            # x_in = decoder([h_pred, skip]).detach()
-            x_in = decoder([h_pred, skip])
+            h_pred = frame_predictor(torch.cat([h, z_t], 1)).detach()
+            x_in = decoder([h_pred, skip]).detach()
             posterior_gen.append(x_in)
   
 
@@ -196,23 +181,10 @@ def make_gifs(x, idx, name):
         # progress.update(s+1)
         gen_seq = []
         gt_seq = []
-        # frame_predictor.hidden = frame_predictor.init_hidden()
-        # posterior.hidden = posterior.init_hidden()
-        # prior.hidden = prior.init_hidden()
-        # frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
-        # posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
-        # prior_hidden = prior.module.init_hidden(opt.batch_size, device)
-        with torch.no_grad():
-            for i in range(frame_predictor.module.n_layers):
-                frame_predictor.module.hidden[i][0].fill_(0)
-                frame_predictor.module.hidden[i][1].fill_(0)
-            for i in range(posterior.module.n_layers):
-                posterior.module.hidden[i][0].fill_(0)
-                posterior.module.hidden[i][1].fill_(0)
-            for i in range(prior.module.n_layers):
-                prior.module.hidden[i][0].fill_(0)
-                prior.module.hidden[i][1].fill_(0)
-        x_in = x[2][0]
+        frame_predictor.hidden = frame_predictor.init_hidden()
+        posterior.hidden = posterior.init_hidden()
+        prior.hidden = prior.init_hidden()
+        x_in = x[0]
         all_gen.append([])
         all_gen[s].append(x_in)
         for i in range(1, opt.n_eval):
@@ -221,29 +193,20 @@ def make_gifs(x, idx, name):
                 h, skip = h
             else:
                 h, _ = h
-            # h = h.detach()
+            h = h.detach()
             if i < opt.n_past:
-                # h_target = encoder(x[i])[0].detach()
-                h_target = encoder(x[2][i])[0]
-                # z_t, _, _ = posterior(h_target)
-                c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
-                # prior(h)
-                p_c, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
-                # frame_predictor(torch.cat([h, z_t], 1))
-                h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),
-                                                                 frame_predictor_hidden)
-                x_in = x[2][i]
+                h_target = encoder(x[i])[0].detach()
+                z_t, _, _ = posterior(h_target)
+                prior(h)
+                frame_predictor(torch.cat([h, z_t], 1))
+                x_in = x[i]
                 all_gen[s].append(x_in)
             else:
-                # z_t, _, _ = prior(h)
-                p_c, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
-                # h = frame_predictor(torch.cat([h, z_t], 1)).detach()
-                h, frame_predictor_hidden = frame_predictor(torch.cat([h, p_c], 1),
-                                                                 frame_predictor_hidden)
-                # x_in = decoder([h, skip]).detach()
-                x_in = decoder([h, skip])
+                z_t, _, _ = prior(h)
+                h = frame_predictor(torch.cat([h, z_t], 1)).detach()
+                x_in = decoder([h, skip]).detach()
                 gen_seq.append(x_in.data.cpu().numpy())
-                gt_seq.append(x[2][i].data.cpu().numpy())
+                gt_seq.append(x[i].data.cpu().numpy())
                 all_gen[s].append(x_in)
         _, ssim[:, s, :], psnr[:, s, :] = utils.eval_seq(gt_seq, gen_seq)
 
@@ -301,8 +264,8 @@ def add_border(x, color, pad=1):
 
 for i in range(0, opt.N, opt.batch_size):
     # plot train
-    # train_x = next(training_batch_generator)
-    # make_gifs(train_x, i, 'train')
+    train_x = next(training_batch_generator)
+    make_gifs(train_x, i, 'train')
 
     # plot test
     test_x = next(testing_batch_generator)

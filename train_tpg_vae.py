@@ -11,7 +11,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import utils
 import itertools
-import progressbar
+# import progressbar
 import numpy as np
 from torch.nn import DataParallel
 import warnings
@@ -483,6 +483,8 @@ for epoch in range(opt.niter):
     #decoder.eval()
     posterior.eval()
     prior.eval()
+    posterior_motion.eval()
+    prior_motion.eval()
 
     x = next(testing_batch_generator)
     for i in range(4):
@@ -495,10 +497,13 @@ for epoch in range(opt.niter):
         # save the model
         torch.save({
             'encoder': encoder,
+            'encoder_motion': encoder_motion,
             'decoder': decoder,
             'frame_predictor': frame_predictor,
             'posterior': posterior,
             'prior': prior,
+            'posterior_motion': posterior_motion,
+            'prior_motion': prior_motion,
             'opt': opt},
             '%s/ckpt/model_%d.pth' % (opt.log_dir, (epoch+1)))
 

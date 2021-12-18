@@ -1,6 +1,6 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+os.environ["CUDA_VISIBLE_DEVICES"]="2,3"
 
 import torch
 import torch.optim as optim
@@ -11,7 +11,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import utils
 import itertools
-# import progressbar
+import progressbar
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 from torch.nn import DataParallel
@@ -27,7 +27,7 @@ parser.add_argument('--n_future', type=int, default=10, help='number of frames t
 parser.add_argument('--num_threads', type=int, default=5, help='number of data loading threads')
 parser.add_argument('--nsample', type=int, default=100, help='number of samples')
 parser.add_argument('--N', type=int, default=256, help='number of samples')
-parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
+parser.add_argument('--gpu_ids', type=str, default='0,1', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
 
 opt = parser.parse_args()
@@ -147,8 +147,6 @@ def make_gifs(x, idx, name):
     # get approx posterior sample
     # frame_predictor.hidden = frame_predictor.init_hidden()
     # posterior.hidden = posterior.init_hidden()
-    # frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
-    # posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
     with torch.no_grad():
         for i in range(frame_predictor.module.n_layers):
             frame_predictor.module.hidden[i][0].fill_(0)
@@ -157,51 +155,39 @@ def make_gifs(x, idx, name):
             posterior.module.hidden[i][0].fill_(0)
             posterior.module.hidden[i][1].fill_(0)
     posterior_gen = []
-    posterior_gen.append(x[2][0])
-    x_in = x[2][0]
+    posterior_gen.append(x[0])
+    x_in = x[0]
     for i in range(1, opt.n_eval):
         h = encoder(x_in)
-        # h_target = encoder(x[i])[0].detach()
-        h_target = encoder(x[2][i])
-        h_target = h_target[0]
+        h_target = encoder(x[i])[0].detach()
         if opt.last_frame_skip or i < opt.n_past:	
             h, skip = h
         else:
             h, _ = h
-        # h = h.detach()
-        # _, z_t, _= posterior(h_target) # take the mean
-        c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
+        h = h.detach()
+        _, z_t, _= posterior(h_target) # take the mean
         if i < opt.n_past:
-            # frame_predictor(torch.cat([h, z_t], 1))
-            h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),
-                                                             frame_predictor_hidden)
-            posterior_gen.append(x[2][i])
-            # x_in = x[i]
-            x_in = x[2][i]
+            frame_predictor(torch.cat([h, z_t], 1)) 
+            posterior_gen.append(x[i])
+            x_in = x[i]
         else:
-            # h_pred = frame_predictor(torch.cat([h, z_t], 1)).detach()
-            h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),
-                                                             frame_predictor_hidden)
-            # x_in = decoder([h_pred, skip]).detach()
-            x_in = decoder([h_pred, skip])
+            h_pred = frame_predictor(torch.cat([h, z_t], 1)).detach()
+            x_in = decoder([h_pred, skip]).detach()
             posterior_gen.append(x_in)
   
 
     nsample = opt.nsample
     ssim = np.zeros((opt.batch_size, nsample, opt.n_future))
     psnr = np.zeros((opt.batch_size, nsample, opt.n_future))
-    # progress = progressbar.ProgressBar(max_value=nsample).start()
+    progress = progressbar.ProgressBar(max_value=nsample).start()
     all_gen = []
     for s in range(nsample):
-        # progress.update(s+1)
+        progress.update(s+1)
         gen_seq = []
         gt_seq = []
         # frame_predictor.hidden = frame_predictor.init_hidden()
         # posterior.hidden = posterior.init_hidden()
         # prior.hidden = prior.init_hidden()
-        # frame_predictor_hidden = frame_predictor.module.init_hidden(opt.batch_size, device)
-        # posterior_hidden = posterior.module.init_hidden(opt.batch_size, device)
-        # prior_hidden = prior.module.init_hidden(opt.batch_size, device)
         with torch.no_grad():
             for i in range(frame_predictor.module.n_layers):
                 frame_predictor.module.hidden[i][0].fill_(0)
@@ -212,7 +198,7 @@ def make_gifs(x, idx, name):
             for i in range(prior.module.n_layers):
                 prior.module.hidden[i][0].fill_(0)
                 prior.module.hidden[i][1].fill_(0)
-        x_in = x[2][0]
+        x_in = x[0]
         all_gen.append([])
         all_gen[s].append(x_in)
         for i in range(1, opt.n_eval):
@@ -221,34 +207,25 @@ def make_gifs(x, idx, name):
                 h, skip = h
             else:
                 h, _ = h
-            # h = h.detach()
+            h = h.detach()
             if i < opt.n_past:
-                # h_target = encoder(x[i])[0].detach()
-                h_target = encoder(x[2][i])[0]
-                # z_t, _, _ = posterior(h_target)
-                c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
-                # prior(h)
-                p_c, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
-                # frame_predictor(torch.cat([h, z_t], 1))
-                h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),
-                                                                 frame_predictor_hidden)
-                x_in = x[2][i]
+                h_target = encoder(x[i])[0].detach()
+                z_t, _, _ = posterior(h_target)
+                prior(h)
+                frame_predictor(torch.cat([h, z_t], 1))
+                x_in = x[i]
                 all_gen[s].append(x_in)
             else:
-                # z_t, _, _ = prior(h)
-                p_c, mu_p_c, logvar_p_c, prior_hidden = prior(h, prior_hidden)
-                # h = frame_predictor(torch.cat([h, z_t], 1)).detach()
-                h, frame_predictor_hidden = frame_predictor(torch.cat([h, p_c], 1),
-                                                                 frame_predictor_hidden)
-                # x_in = decoder([h, skip]).detach()
-                x_in = decoder([h, skip])
+                z_t, _, _ = prior(h)
+                h = frame_predictor(torch.cat([h, z_t], 1)).detach()
+                x_in = decoder([h, skip]).detach()
                 gen_seq.append(x_in.data.cpu().numpy())
-                gt_seq.append(x[2][i].data.cpu().numpy())
+                gt_seq.append(x[i].data.cpu().numpy())
                 all_gen[s].append(x_in)
         _, ssim[:, s, :], psnr[:, s, :] = utils.eval_seq(gt_seq, gen_seq)
 
-    # progress.finish()
-    # utils.clear_progressbar()
+    progress.finish()
+    utils.clear_progressbar()
 
     ###### ssim ######
     for i in range(opt.batch_size):
@@ -306,6 +283,7 @@ for i in range(0, opt.N, opt.batch_size):
 
     # plot test
     test_x = next(testing_batch_generator)
+    for i in range(4):
+        test_x[i] = test_x[i].to(device)
     make_gifs(test_x, i, 'test')
     print(i)
-

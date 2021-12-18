@@ -1,14 +1,17 @@
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"]="1, 2"
+
 import torch
 import torch.optim as optim
 import torch.nn as nn
 import argparse
-import os
 import random
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import utils
 import itertools
-import progressbar
+# import progressbar
 import numpy as np
 from torch.nn import DataParallel
 import warnings
@@ -44,7 +47,8 @@ parser.add_argument('--model', default='dcgan', help='model type (dcgan | vgg)')
 parser.add_argument('--data_threads', type=int, default=5, help='number of data loading threads')
 parser.add_argument('--num_digits', type=int, default=2, help='number of digits for moving mnist')
 parser.add_argument('--last_frame_skip', action='store_true', help='if true, skip connections go between frame t and frame t+t rather than last ground truth frame')
-parser.add_argument('--gpu_id', type=int, default=0, help='(single) gpu id')
+# parser.add_argument('--gpu_id', type=int, default=0, help='(single) gpu id')
+parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
 opt = parser.parse_args()
 
