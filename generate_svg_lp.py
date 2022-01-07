@@ -17,7 +17,7 @@ from scipy.ndimage.filters import gaussian_filter
 from torch.nn import DataParallel
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', default=100, type=int, help='batch size')
+parser.add_argument('--batch_size', default=32, type=int, help='batch size')
 parser.add_argument('--data_root', default='dataset/Cholec80', help='root directory for data')
 parser.add_argument('--model_path', default='', help='path to model')
 parser.add_argument('--log_dir', default='logs', help='directory to save generations to')
@@ -170,7 +170,7 @@ def make_gifs(x, idx, name):
             h, _ = h
         # h = h.detach()
         # _, z_t, _= posterior(h_target) # take the mean
-        c_t, mu_c, logvar_c, posterior_hidden = posterior(h_target, posterior_hidden)
+        c_t, mu_c, logvar_c, posterior.module.hidden = posterior(h_target, posterior.module.hidden)
         if i < opt.n_past:
             # frame_predictor(torch.cat([h, z_t], 1))
             h_pred, frame_predictor_hidden = frame_predictor(torch.cat([h, mu_c], 1),

@@ -66,10 +66,13 @@ tmp = torch.load(opt.model_path, map_location=device)
 frame_predictor = tmp['frame_predictor']
 posterior = tmp['posterior']
 prior = tmp['prior']
+posterior_motion = tmp['posterior_motion']
+prior_motion = tmp['prior_motion']
 frame_predictor.eval()
 prior.eval()
 posterior.eval()
 encoder = tmp['encoder']
+encoder_motion = tmp['encoder_motion']
 decoder = tmp['decoder']
 encoder.train()
 decoder.train()
@@ -86,6 +89,14 @@ opt.num_digits = tmp['opt'].num_digits
 # prior.cuda()
 # encoder.cuda()
 # decoder.cuda()
+frame_predictor = frame_predictor.module
+posterior = posterior.module
+prior = prior.module
+posterior_motion = posterior_motion.module
+prior_motion = prior_motion.module
+encoder = encoder.module
+encoder_motion = encoder_motion.module
+decoder = decoder.module
 frame_predictor = DataParallel(frame_predictor, device_ids = device_ids)
 frame_predictor.to(device)
 posterior = DataParallel(posterior, device_ids = device_ids)
@@ -102,8 +113,8 @@ encoder_motion = DataParallel(encoder_motion, device_ids = device_ids)
 encoder_motion.to(device)
 decoder = DataParallel(decoder, device_ids = device_ids)
 decoder.to(device)
-mse_criterion = DataParallel(mse_criterion, device_ids = device_ids)
-mse_criterion.to(device)
+# mse_criterion = DataParallel(mse_criterion, device_ids = device_ids)
+# mse_criterion.to(device)
 
 # ---------------- set the options ----------------
 opt.dataset = tmp['opt'].dataset
