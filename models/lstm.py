@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
+# from torch.autograd import Variable
 
 class lstm(nn.Module):
     def __init__(self, input_size, output_size, hidden_size, n_layers, batch_size):
@@ -21,19 +21,17 @@ class lstm(nn.Module):
         hidden = torch.Tensor([])
         for i in range(self.n_layers):
             hidden = torch.cat((hidden, hc))
-        self.hidden = nn.Parameter(hidden)
+        self.register_buffer('hidden', hidden)
 
     def init_hidden(self):
-        with torch.no_grad():
-            self.hidden.fill_(0)
+        self.hidden.zero_()
 
     def forward(self, input):
-        input = input.view(-1, self.input_size)
-        embedded = self.embed(input)
+        embedded = self.embed(input.view(-1, self.input_size))
         h_in = embedded
         for i in range(self.n_layers):
             with torch.no_grad():
-                hc = torch.unbind(self.hidden[i])
+                hc = torch.unbind(self.hidden[i].clone())
             lstm_out = self.lstm[i](h_in, hc)
             lstm_out = torch.stack(lstm_out)
             with torch.no_grad():
@@ -60,11 +58,10 @@ class gaussian_lstm(nn.Module):
         hidden = torch.Tensor([])
         for i in range(self.n_layers):
             hidden = torch.cat((hidden, hc))
-        self.hidden = nn.Parameter(hidden)
+        self.register_buffer('hidden', hidden)
 
     def init_hidden(self):
-        with torch.no_grad():
-            self.hidden.fill_(0)
+        self.hidden.zero_()
 
     def reparameterize(self, mu, logvar):
         logvar = logvar.mul(0.5).exp_()
@@ -72,12 +69,11 @@ class gaussian_lstm(nn.Module):
         return eps.mul(logvar).add_(mu)
 
     def forward(self, input):
-        input = input.view(-1, self.input_size)
-        embedded = self.embed(input)
+        embedded = self.embed(input.view(-1, self.input_size))
         h_in = embedded
         for i in range(self.n_layers):
             with torch.no_grad():
-                hc = torch.unbind(self.hidden[i])
+                hc = torch.unbind(self.hidden[i].clone())
             lstm_out = self.lstm[i](h_in, hc)
             lstm_out = torch.stack(lstm_out)
             with torch.no_grad():
