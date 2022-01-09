@@ -23,8 +23,8 @@ class lstm(nn.Module):
         hidden = []
         for i in range(self.n_layers):
             # if torch.cuda.is_available():
-            hidden.append((Variable(torch.zeros(batch_size, self.hidden_size).to(device)),
-                           Variable(torch.zeros(batch_size, self.hidden_size).to(device))))
+            hidden.append((Variable(torch.zeros(batch_size, self.hidden_size, device=device)),
+                           Variable(torch.zeros(batch_size, self.hidden_size, device=device))))
                 # hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size).cuda()),
                 #                Variable(torch.zeros(self.batch_size, self.hidden_size).cuda())))
             # else:
@@ -70,8 +70,8 @@ class gaussian_lstm(nn.Module):
         hidden = []
         for i in range(self.n_layers):
             # if torch.cuda.is_available():
-            hidden.append((Variable(torch.zeros(batch_size, self.hidden_size).to(device)),
-                           Variable(torch.zeros(batch_size, self.hidden_size).to(device))))
+            hidden.append((Variable(torch.zeros(batch_size, self.hidden_size, device=device)),
+                           Variable(torch.zeros(batch_size, self.hidden_size, device=device))))
                 # hidden.append((Variable(torch.zeros(self.batch_size, self.hidden_size).cuda()),
                 #                Variable(torch.zeros(self.batch_size, self.hidden_size).cuda())))
             # else:
